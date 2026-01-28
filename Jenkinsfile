@@ -2,50 +2,30 @@ pipeline {
   agent any
 
   options {
-    // Показывать тайминги, логировать окружение, и не копить старые сборки
     timestamps()
     buildDiscarder(logRotator(numToKeepStr: '20'))
+    ansiColor('xterm')
   }
 
   environment {
-    // Позволяет импортировать модули из корня репо: import math
+    // Чтобы можно было импортировать модули из корня репозитория (например: from math import add)
     PYTHONPATH = "${WORKSPACE}"
   }
 
   stages {
-    stage('Checkout') {
-      steps {
-          branches: [[name: '*/main']],              // ← ветка main
-          userRemoteConfigs: [[
-            url: 'https://github.com/ak-stacy/qaops.git',  // ← твой реальный URL
-            credentialsId: 'github-akstacy-pat'     // ← ID твоих кредов (HTTPS+PAT или SSH ID)
-          ]],
-          extensions: [[$class: 'PruneStaleBranch'], [$class: 'CleanBeforeCheckout']]
-        ])
-      }
-    }
-
     stage('Set up Python') {
       steps {
         sh '''
+          python3 -V
           python3 -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
-          # Если нет requirements.txt, ставим только pytest
-          test -f requirements.txt && pip install -r requirements.txt || pip install pytest
-        '''
-      }
-    }
-
-    stage('Lint (optional)') {
-      when {
-        expression { return false } // включи при необходимости
-      }
-      steps {
-        sh '''
-          . venv/bin/activate
-          pip install flake8 || true
-          flake8 . || true
+          # Если есть requirements.txt — используем его, иначе поставим только pytest
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install pytest
+          fi
         '''
       }
     }
@@ -54,16 +34,16 @@ pipeline {
       steps {
         sh '''
           . venv/bin/activate
-          # Вариант 1: запуск всех тестов
-          # pytest -q --junitxml=report.xml
-
-          # Вариант 2: временно исключить "падающий" test_sample.py:
+          # ВАРИАНТ A: временно исключить заведомо падающий test_sample.py
           pytest -q --junitxml=report.xml -k "not sample" || true
+
+          # ВАРИАНТ B: запускать всё (сделает билд красным, если test_sample.py остаётся красным)
+          # pytest -q --junitxml=report.xml || true
         '''
       }
       post {
         always {
-          // Публикация отчёта (JUnit)
+          // Подхват JUnit-отчёта даже если тесты падали
           junit allowEmptyResults: true, testResults: 'report.xml'
         }
       }
@@ -72,7 +52,6 @@ pipeline {
 
   post {
     always {
-      // Сохранить артефакты на всякий случай
       archiveArtifacts artifacts: 'report.xml', fingerprint: true, onlyIfSuccessful: false
     }
   }
