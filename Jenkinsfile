@@ -8,8 +8,8 @@ pipeline {
   }
 
   environment {
-    // Чтобы можно было импортировать модули из корня репозитория (например: from math import add)
-    PYTHONPATH = "${WORKSPACE}"
+    // Делаем так, чтобы Python видел модули из qaops/src
+    PYTHONPATH = "${WORKSPACE}/qaops/src"
   }
 
   stages {
@@ -20,10 +20,10 @@ pipeline {
           python3 -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
-          # Если есть requirements.txt — используем его, иначе поставим только pytest
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
+            # Минимально необходимое для запуска
             pip install pytest
           fi
         '''
@@ -34,16 +34,13 @@ pipeline {
       steps {
         sh '''
           . venv/bin/activate
-          # ВАРИАНТ A: временно исключить заведомо падающий test_sample.py
-          pytest -q --junitxml=report.xml -k "not sample" || true
-
-          # ВАРИАНТ B: запускать всё (сделает билд красным, если test_sample.py остаётся красным)
-          # pytest -q --junitxml=report.xml || true
+          # Запускаем ВСЕ тесты из qaops/tests, без исключений
+          pytest -q qaops/tests --junitxml=report.xml
         '''
       }
       post {
         always {
-          // Подхват JUnit-отчёта даже если тесты падали
+          // Публикуем JUnit-отчёт даже если тесты упали
           junit allowEmptyResults: true, testResults: 'report.xml'
         }
       }
