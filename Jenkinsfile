@@ -25,53 +25,22 @@ pipeline {
       }
     }
 
-    stage('Inspect workspace & locate project paths') {
+    stage('Write .paths') {
       steps {
         sh '''
-          echo "== Workspace root =="
-          pwd
-          echo "== Top-level =="
-          ls -la || true
-
-          echo "== Try listing qaops =="
-          ls -la qaops || true
-          echo "== Try listing qaops/qaops =="
-          ls -la qaops/qaops || true
-
-          echo "== Find candidate src/tests =="
-          # Ищем src и tests на глубину до 3 каталогов
-          find . -maxdepth 3 -type d -name src -o -name tests | sed 's|^./||' || true
-
-          # Определяем SRC_DIR и TEST_DIR
           set -e
-          SRC_DIR=""
-          TEST_DIR=""
+          # ТВОИ актуальные пути после упрощения структуры:
+          SRC_DIR="qaops/src"
+          TEST_DIR="qaops/tests"
 
-          # Порядок проверки: двойная папка, одиночная папка, корень
-          if [ -d "qaops/qaops/src" ] && [ -d "qaops/qaops/tests" ]; then
-            SRC_DIR="qaops/qaops/src"
-            TEST_DIR="qaops/qaops/tests"
-          elif [ -d "qaops/src" ] && [ -d "qaops/tests" ]; then
-            SRC_DIR="qaops/src"
-            TEST_DIR="qaops/tests"
-          elif [ -d "src" ] && [ -d "tests" ]; then
-            SRC_DIR="src"
-            TEST_DIR="tests"
-          fi
+          # Создаём служебный файл с путями
+          {
+            echo "SRC_DIR=$SRC_DIR"
+            echo "TEST_DIR=$TEST_DIR"
+          } > .paths
 
-          if [ -z "$SRC_DIR" ] || [ -z "$TEST_DIR" ]; then
-            echo "ERROR: Не удалось автоматически найти каталоги src/tests."
-            echo "Пожалуйста, проверь структуру репозитория в workspace."
-            echo "Список каталогов (глубина до 3):"
-            find . -maxdepth 3 -type d -print
-            exit 1
-          fi
-
-          echo "SRC_DIR=$SRC_DIR" > .paths
-          echo "TEST_DIR=$TEST_DIR" >> .paths
-
-          echo "Detected SRC_DIR=$SRC_DIR"
-          echo "Detected TEST_DIR=$TEST_DIR"
+          echo "[.paths created]"
+          cat .paths
         '''
       }
     }
@@ -81,9 +50,7 @@ pipeline {
         sh '''
           set -e
           PY=$(cat .pybin)
-          . .paths
-          echo "Using interpreter: $PY"
-          echo "Using SRC_DIR=$SRC_DIR, TEST_DIR=$TEST_DIR"
+          . ./.paths
 
           $PY -m venv venv
           . venv/bin/activate
@@ -101,15 +68,15 @@ pipeline {
       steps {
         sh '''
           set -e
-          . .paths
+          . ./.paths
           . venv/bin/activate
 
-          # Добавляем найденный SRC_DIR в PYTHONPATH, чтобы работал import из utils.math
-          export PYTHONPATH="${WORKSPACE}/$SRC_DIR"
+          # Добавляем SRC_DIR в PYTHONPATH, чтобы проходили импорты (from utils.math import add)
+          export PYTHONPATH="${WORKSPACE}/${SRC_DIR}"
           echo "PYTHONPATH=$PYTHONPATH"
 
-          # Запуск ВСЕХ тестов без исключений
-          pytest -q "$TEST_DIR" --junitxml=report.xml
+          # Запускаем ВСЕ тесты, без исключений
+          pytest -q "${TEST_DIR}" --junitxml=report.xml
         '''
       }
       post {
