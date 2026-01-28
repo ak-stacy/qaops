@@ -109,7 +109,7 @@ pipeline {
       }
       post {
         always {
-			unit allowEmptyResults: true, testResults: 'report.xml'
+			junit allowEmptyResults: true, testResults: 'report.xml'
 			allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
 
         }
