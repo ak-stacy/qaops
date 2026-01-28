@@ -1,29 +1,31 @@
 pipeline {
-  agent any
+  agent {
+    docker {
+      image 'python:3.11-slim'   // можно 'python:3.12-slim' или 'python:3.11-alpine'
+      args '-u 0:0'              // чтобы не было проблем с правами на workspace
+      reuseNode true
+    }
+  }
 
   options {
     timestamps()
     buildDiscarder(logRotator(numToKeepStr: '20'))
-    ansiColor('xterm')
+    // при желании можно добавить wrap(AnsiColor...), если плагин установлен
   }
 
   environment {
-    // Делаем так, чтобы Python видел модули из qaops/src
     PYTHONPATH = "${WORKSPACE}/qaops/src"
   }
 
   stages {
-    stage('Set up Python') {
+    stage('Set up Python deps') {
       steps {
         sh '''
-          python -V
-          python -m venv venv
-          . venv/bin/activate
+          python --version
           pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            # Минимально необходимое для запуска
             pip install pytest
           fi
         '''
@@ -33,14 +35,11 @@ pipeline {
     stage('Run tests') {
       steps {
         sh '''
-          . venv/bin/activate
-          # Запускаем ВСЕ тесты из qaops/tests, без исключений
           pytest -q qaops/tests --junitxml=report.xml
         '''
       }
       post {
         always {
-          // Публикуем JUnit-отчёт даже если тесты упали
           junit allowEmptyResults: true, testResults: 'report.xml'
         }
       }
