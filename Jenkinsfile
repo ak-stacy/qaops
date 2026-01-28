@@ -5,7 +5,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/USERNAME/REPOSITORY.git',
+                    url: 'https://github.com/ak-stacy/qaops.git',
                     credentialsId: 'github-akstacy-pat'
             }
         }
