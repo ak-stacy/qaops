@@ -16,8 +16,8 @@ pipeline {
     stage('Set up Python') {
       steps {
         sh '''
-          python3 -V
-          python3 -m venv venv
+          python -V
+          python -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
           if [ -f requirements.txt ]; then
