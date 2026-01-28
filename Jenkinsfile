@@ -25,15 +25,42 @@ pipeline {
       }
     }
 
-    stage('Write .paths') {
+    stage('Locate src/tests & write .paths') {
       steps {
         sh '''
           set -e
-          # ТВОИ актуальные пути после упрощения структуры:
-          SRC_DIR="qaops/src"
-          TEST_DIR="qaops/tests"
+          echo "== Workspace root =="
+          pwd
+          echo "== Top-level =="
+          ls -la || true
 
-          # Создаём служебный файл с путями
+          echo "== Candidate dirs (depth<=3) =="
+          find . -maxdepth 3 -type d -name src -o -name tests | sed 's|^./||' || true
+
+          SRC_DIR=""
+          TEST_DIR=""
+
+          # 1) Предпочтительно: qaops/src + qaops/tests
+          if [ -d "qaops/src" ] && [ -d "qaops/tests" ]; then
+            SRC_DIR="qaops/src"
+            TEST_DIR="qaops/tests"
+          # 2) Альтернатива: просто src + tests в корне
+          elif [ -d "src" ] && [ -d "tests" ]; then
+            SRC_DIR="src"
+            TEST_DIR="tests"
+          # 3) На случай старой структуры: qaops/qaops/src + qaops/qaops/tests
+          elif [ -d "qaops/qaops/src" ] && [ -d "qaops/qaops/tests" ]; then
+            SRC_DIR="qaops/qaops/src"
+            TEST_DIR="qaops/qaops/tests"
+          fi
+
+          if [ -z "$SRC_DIR" ] || [ -z "$TEST_DIR" ]; then
+            echo "ERROR: Не удалось найти каталоги src/tests автоматически."
+            echo "Дерево каталогов (depth<=3):"
+            find . -maxdepth 3 -type d -print
+            exit 1
+          fi
+
           {
             echo "SRC_DIR=$SRC_DIR"
             echo "TEST_DIR=$TEST_DIR"
@@ -71,7 +98,7 @@ pipeline {
           . ./.paths
           . venv/bin/activate
 
-          # Добавляем SRC_DIR в PYTHONPATH, чтобы проходили импорты (from utils.math import add)
+          # Указываем src в PYTHONPATH — это позволит импортам вида: from utils.math import add
           export PYTHONPATH="${WORKSPACE}/${SRC_DIR}"
           echo "PYTHONPATH=$PYTHONPATH"
 
