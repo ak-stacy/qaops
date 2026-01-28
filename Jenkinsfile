@@ -6,7 +6,7 @@ pipeline {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/USERNAME/REPOSITORY.git',
-                    credentialsId: 'github-token'
+                    credentialsId: 'github-akstacy-pat'
             }
         }
 
