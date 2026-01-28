@@ -6,6 +6,11 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
+  environment {
+    // абсолютный путь до src внутри workspace
+    PYTHONPATH = "${WORKSPACE}/qaops/qaops/src"
+  }
+
   stages {
     stage('Detect Python') {
       steps {
@@ -27,34 +32,29 @@ pipeline {
 
     stage('Set up venv & deps') {
       steps {
-        dir('qaops') {
-          sh '''
-            set -e
-            PY=$(cat ../.pybin)   # .pybin лежит на уровень выше
-            $PY -m venv venv
-            . venv/bin/activate
-            pip install --upgrade pip
-            if [ -f requirements.txt ]; then
-              pip install -r requirements.txt
-            else
-              pip install pytest
-            fi
-          '''
-        }
+        sh '''
+          set -e
+          PY=$(cat .pybin)
+          $PY -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install pytest
+          fi
+        '''
       }
     }
 
     stage('Run tests') {
       steps {
-        dir('qaops') {
-          sh '''
-            set -e
-            . venv/bin/activate
-            # Просто запускаем pytest в каталоге qaops — он сам найдёт qaops/tests
-            # PYTHONPATH указываем на qaops/src, потому что там лежат модули
-            PYTHONPATH="$(pwd)/qaops/src" pytest -q qaops/tests --junitxml=../report.xml
-          '''
-        }
+        sh '''
+          set -e
+          . venv/bin/activate
+          # Указываем полный путь к папке тестов
+          pytest -q qaops/qaops/tests --junitxml=report.xml
+        '''
       }
       post {
         always {
