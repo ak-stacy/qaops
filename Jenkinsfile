@@ -86,6 +86,7 @@ pipeline {
             pip install -r requirements.txt
           else
             pip install pytest
+			pip install allure-pytest
           fi
         '''
       }
@@ -103,12 +104,14 @@ pipeline {
           echo "PYTHONPATH=$PYTHONPATH"
 
           # Запускаем ВСЕ тесты, без исключений
-          pytest -q "${TEST_DIR}" --junitxml=report.xml
+          pytest -q "${TEST_DIR}" --alluredir=allure-results --junitxml=report.xm
         '''
       }
       post {
         always {
-          junit allowEmptyResults: true, testResults: 'report.xml'
+			unit allowEmptyResults: true, testResults: 'report.xml'
+			allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
+
         }
       }
     }
