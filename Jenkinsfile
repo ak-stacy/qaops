@@ -104,7 +104,7 @@ pipeline {
           echo "PYTHONPATH=$PYTHONPATH"
 
           # Запускаем ВСЕ тесты, без исключений
-          pytest -q "${TEST_DIR}" --alluredir=allure-results --junitxml=report.xm
+          pytest -q "${TEST_DIR}" --alluredir=allure-results --junitxml=report.xml
         '''
       }
       post {
