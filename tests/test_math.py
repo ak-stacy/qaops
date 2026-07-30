@@ -12,3 +12,4 @@ def test_add_simple_sum():
 ])
 def test_add_parametrized(a, b, expected):
     assert add(a, b) == expected, f"Expected {a}+{b}={expected}"
+

@@ -6,6 +6,8 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
+variables:
+env= "stage", "test"
   stages {
     stage('Detect Python') {
       steps {
