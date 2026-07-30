@@ -7,7 +7,6 @@ pipeline {
   }
 
 variables:
-env= "stage", "test"
   stages {
     stage('Detect Python') {
       steps {
