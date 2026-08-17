@@ -144,9 +144,13 @@ pipeline {
         }
     }
 
-    post {
+        post {
         always {
             archiveArtifacts(
                 artifacts: 'report.xml',
                 fingerprint: true,
-                onlyIfSuccessful
+                onlyIfSuccessful: false
+            )
+        }
+    }
+}
