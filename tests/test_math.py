@@ -1,6 +1,6 @@
 import pytest
 
-from utils.math import add
+from src.utils.math import add
 
 def test_add_simple_sum():
     assert add(2, 2) == 4, "Expected 2+2=4, but function returned another value."
