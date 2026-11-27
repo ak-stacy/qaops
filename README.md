@@ -48,6 +48,14 @@ git switch feature/autotests
 git switch -c candidate/<name>
 ```
 
+For the first task, add your surname on a new line in `exam.txt`. The assessor may also assign these branches for focused exercises:
+
+- `exercise/deploy-fails`
+- `exercise/dockerfile-broken`
+- `exercise/container-exits`
+- `exercise/add-runtime-dependency`
+- `exercise/merge-candidate` and `exercise/merge-upstream`
+
 After fixing the issue:
 
 ```powershell
