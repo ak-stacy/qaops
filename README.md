@@ -1,6 +1,6 @@
 # QA Ops Exam Project
 
-This repository is a small Python HTTP service used for hands-on QA Ops interviews. It has a real test suite, Docker image, and Jenkins pipeline. Candidates use actual Git, Jenkins, and Docker; there is no command simulator.
+This repository contains a small HTTP API used to demonstrate QA Operations workflows with tests, containers, and continuous integration.
 
 ## Run and test locally
 
