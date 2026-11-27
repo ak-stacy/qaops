@@ -81,7 +81,10 @@ pipeline {
                     echo $! > .qaops-app.pid
 
                     for attempt in $(seq 1 20); do
-                        if curl --fail --silent "http://127.0.0.1:$DEPLOY_PORT/healthz" > /dev/null; then
+                        response_code=$(curl --silent --output /dev/null \
+                            --write-out '%{http_code}' \
+                            "http://127.0.0.1:$DEPLOY_PORT/health" || true)
+                        if [ "$response_code" = "200" ]; then
                             echo "Application deployed to $ENVIRONMENT and responding on port $DEPLOY_PORT."
                             exit 0
                         fi
@@ -89,7 +92,7 @@ pipeline {
                     done
 
                     cat deploy.log
-                    echo "ERROR: deployed application did not become healthy."
+                    echo "ERROR: health check for http://127.0.0.1:$DEPLOY_PORT/health returned HTTP ${response_code:-000}."
                     exit 1
                 '''
             }
@@ -101,17 +104,7 @@ pipeline {
             }
             steps {
                 sh '''
-                    QAOPS_ENV="$ENVIRONMENT" .venv/bin/python -c '
-                    import json
-                    import os
-                    from urllib.request import urlopen
-
-                    with urlopen("http://127.0.0.1:5001/health", timeout=5) as response:
-                        health = json.loads(response.read())
-                    assert health["status"] == "ok", health
-                    assert health["environment"] == os.environ["QAOPS_ENV"], health
-                    print(health)
-                    '
+                    QAOPS_ENV="$ENVIRONMENT" .venv/bin/python -c 'import json, os; from urllib.request import urlopen; health = json.loads(urlopen("http://127.0.0.1:5001/health", timeout=5).read()); assert health["status"] == "ok", health; assert health["environment"] == os.environ["QAOPS_ENV"], health; print(health)'
                 '''
             }
         }

@@ -8,7 +8,7 @@ from utils.math import add
 app = Flask(__name__)
 
 
-@app.get("/health")
+@app.get("/healthz")
 def health():
     return jsonify(status="ok", environment=os.getenv("QAOPS_ENV", "local"))
 
