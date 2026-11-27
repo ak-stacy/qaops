@@ -139,7 +139,11 @@ pipeline {
 
     post {
         always {
-            junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+            script {
+                if (fileExists('reports/junit.xml')) {
+                    junit testResults: 'reports/junit.xml'
+                }
+            }
             archiveArtifacts allowEmptyArchive: true,
                 artifacts: 'reports/junit.xml,deploy.log'
             sh(script: '''
