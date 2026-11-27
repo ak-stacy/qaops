@@ -14,4 +14,4 @@ COPY src/ ./src/
 
 EXPOSE 5000
 
-CMD ["python", "-m", "app"]
+CMD ["python", "-m", "missing_app"]
