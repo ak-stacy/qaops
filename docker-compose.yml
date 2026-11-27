@@ -1,0 +1,25 @@
+services:
+  qaops-api:
+    build:
+      context: .
+    image: qaops-api:local
+    environment:
+      QAOPS_ENV: ${QAOPS_ENV:-local}
+    ports:
+      - "127.0.0.1:5000:5000"
+
+  jenkins:
+    profiles:
+      - ci
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+    image: qaops-jenkins:local
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:

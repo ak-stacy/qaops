@@ -3,154 +3,161 @@ pipeline {
 
     options {
         timestamps()
+        disableConcurrentBuilds()
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
     parameters {
+        string(
+            name: 'SOURCE_BRANCH',
+            defaultValue: 'feature/autotests',
+            description: 'Branch to check out from the QA Ops repository'
+        )
+        choice(
+            name: 'ACTION',
+            choices: ['regression', 'deploy', 'post-deploy'],
+            description: 'Run regression tests, deploy the test app, or deploy and test it'
+        )
         choice(
             name: 'ENVIRONMENT',
-            choices: ['dev', 'test', 'stage', 'prod'],
-            description: 'Select environmets to run the tests'
+            choices: ['test', 'dev', 'stage'],
+            description: 'Target test environment'
+        )
+        choice(
+            name: 'TEST_SUITE',
+            choices: ['all', 'unit', 'api'],
+            description: 'Test group for regression runs'
         )
     }
 
+    environment {
+        DEPLOY_PORT = '5001'
+        REPOSITORY_URL = 'https://github.com/ak-stacy/qaops.git'
+    }
+
     stages {
+        stage('Checkout source branch') {
+            steps {
+                deleteDir()
+                git branch: params.SOURCE_BRANCH, url: env.REPOSITORY_URL
+                sh 'git status --short --branch'
+            }
+        }
 
-        stage('Detect Python') {
+        stage('Prepare Python environment') {
             steps {
                 sh '''
-                    set -e
+                    set -eu
+                    python3 --version
+                    python3 -m venv .venv
+                    .venv/bin/python -m pip install --upgrade pip
+                    .venv/bin/python -m pip install -r requirements-dev.txt
+                '''
+            }
+        }
 
-                    if command -v python3 >/dev/null 2>&1; then
-                        PY=python3
-                    elif command -v python >/dev/null 2>&1; then
-                        PY=python
+        stage('Deploy test environment') {
+            when {
+                expression { params.ACTION in ['deploy', 'post-deploy'] }
+            }
+            steps {
+                sh '''
+                    set -eu
+                    if [ -f .qaops-app.pid ]; then
+                        old_pid=$(cat .qaops-app.pid)
+                        if kill -0 "$old_pid" 2>/dev/null; then
+                            kill "$old_pid"
+                        fi
+                        rm -f .qaops-app.pid
+                    fi
+
+                    JENKINS_NODE_COOKIE=dontKillMe BUILD_ID=dontKillMe \
+                        nohup env \
+                            QAOPS_ENV="$ENVIRONMENT" \
+                            PORT="$DEPLOY_PORT" \
+                            PYTHONPATH="$WORKSPACE/src" \
+                            "$WORKSPACE/.venv/bin/python" -m app \
+                            > deploy.log 2>&1 < /dev/null &
+                    echo $! > .qaops-app.pid
+
+                    for attempt in $(seq 1 20); do
+                        if curl --fail --silent "http://127.0.0.1:$DEPLOY_PORT/health" > /dev/null; then
+                            echo "Application deployed to $ENVIRONMENT and responding on port $DEPLOY_PORT."
+                            exit 0
+                        fi
+                        sleep 1
+                    done
+
+                    cat deploy.log
+                    echo "ERROR: deployed application did not become healthy."
+                    exit 1
+                '''
+            }
+        }
+
+        stage('Verify deployed environment') {
+            when {
+                expression { params.ACTION in ['deploy', 'post-deploy'] }
+            }
+            steps {
+                sh '''
+                    QAOPS_ENV="$ENVIRONMENT" .venv/bin/python -c '
+                    import json
+                    import os
+                    from urllib.request import urlopen
+
+                    with urlopen("http://127.0.0.1:5001/health", timeout=5) as response:
+                        health = json.loads(response.read())
+                    assert health["status"] == "ok", health
+                    assert health["environment"] == os.environ["QAOPS_ENV"], health
+                    print(health)
+                    '
+                '''
+            }
+        }
+
+        stage('Run autotests') {
+            when {
+                expression { params.ACTION in ['regression', 'post-deploy'] }
+            }
+            steps {
+                sh '''
+                    set -eu
+                    mkdir -p reports
+
+                    if [ "$ACTION" = "post-deploy" ]; then
+                        QAOPS_BASE_URL="http://127.0.0.1:$DEPLOY_PORT" \
+                            .venv/bin/python -m pytest tests \
+                            --junitxml=reports/junit.xml
                     else
-                        echo "ERROR: Python is not installed on this agent."
-                        exit 1
+                        case "$TEST_SUITE" in
+                            unit) test_path=tests/test_math.py ;;
+                            api) test_path=tests/test_api.py ;;
+                            all) test_path=tests ;;
+                            *) echo "Unsupported test suite: $TEST_SUITE"; exit 2 ;;
+                        esac
+                        .venv/bin/python -m pytest "$test_path" \
+                            --junitxml=reports/junit.xml
                     fi
-
-                    echo "$PY" > .pybin
-                    $PY --version
                 '''
-            }
-        }
-
-        stage('Show Environment') {
-            steps {
-                echo "Selected environment: ${params.ENVIRONMENT}"
-            }
-        }
-
-        stage('Locate src/tests & write .paths') {
-            steps {
-                sh '''
-                    set -e
-
-                    echo "== Workspace root =="
-                    pwd
-
-                    echo "== Top-level =="
-                    ls -la || true
-
-                    echo "== Candidate dirs (depth<=3) =="
-                    find . -maxdepth 3 \\( -name src -o -name tests \\) -type d | sed 's|^./||' || true
-
-                    SRC_DIR=""
-                    TEST_DIR=""
-
-                    if [ -d "qaops/src" ] && [ -d "qaops/tests" ]; then
-                        SRC_DIR="qaops/src"
-                        TEST_DIR="qaops/tests"
-                    elif [ -d "src" ] && [ -d "tests" ]; then
-                        SRC_DIR="src"
-                        TEST_DIR="tests"
-                    elif [ -d "qaops/qaops/src" ] && [ -d "qaops/qaops/tests" ]; then
-                        SRC_DIR="qaops/qaops/src"
-                        TEST_DIR="qaops/qaops/tests"
-                    fi
-
-                    if [ -z "$SRC_DIR" ] || [ -z "$TEST_DIR" ]; then
-                        echo "ERROR: Не удалось найти каталоги src/tests автоматически."
-                        find . -maxdepth 3 -type d -print
-                        exit 1
-                    fi
-
-                    {
-                        echo "SRC_DIR=$SRC_DIR"
-                        echo "TEST_DIR=$TEST_DIR"
-                    } > .paths
-
-                    cat .paths
-                '''
-            }
-        }
-
-        stage('Set up venv & deps') {
-            steps {
-                sh '''
-                    set -e
-
-                    PY=$(cat .pybin)
-
-                    $PY -m venv venv
-
-                    . venv/bin/activate
-
-                    pip install --upgrade pip
-
-                    if [ -f requirements.txt ]; then
-                        pip install -r requirements.txt
-                    fi
-
-                    pip install pytest allure-pytest
-                '''
-            }
-        }
-
-        stage('Run tests') {
-            steps {
-                sh '''
-                    set -e
-
-                    . ./.paths
-                    . venv/bin/activate
-
-                    export PYTHONPATH="${WORKSPACE}/${SRC_DIR}"
-                    export TEST_ENV="${ENVIRONMENT}"
-
-                    echo "PYTHONPATH=$PYTHONPATH"
-                    echo "TEST_ENV=$TEST_ENV"
-
-                    pytest \
-                        -q "${TEST_DIR}" \
-                        --alluredir=allure-results \
-                        --junitxml=report.xml
-                '''
-            }
-
-            post {
-                always {
-                    junit allowEmptyResults: true,
-                          testResults: 'report.xml'
-
-                    allure(
-                        includeProperties: false,
-                        jdk: '',
-                        results: [[path: 'allure-results']]
-                    )
-                }
             }
         }
     }
 
-        post {
+    post {
         always {
-            archiveArtifacts(
-                artifacts: 'report.xml',
-                fingerprint: true,
-                onlyIfSuccessful: false
-            )
+            junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+            archiveArtifacts allowEmptyArchive: true,
+                artifacts: 'reports/junit.xml,deploy.log'
+            sh(script: '''
+                if [ -f .qaops-app.pid ]; then
+                    app_pid=$(cat .qaops-app.pid)
+                    if kill -0 "$app_pid" 2>/dev/null; then
+                        kill "$app_pid"
+                    fi
+                    rm -f .qaops-app.pid
+                fi
+            ''', returnStatus: true)
         }
     }
 }
