@@ -81,7 +81,7 @@ pipeline {
                     echo $! > .qaops-app.pid
 
                     for attempt in $(seq 1 20); do
-                        if curl --fail --silent "http://127.0.0.1:$DEPLOY_PORT/health" > /dev/null; then
+                        if curl --fail --silent "http://127.0.0.1:$DEPLOY_PORT/healthz" > /dev/null; then
                             echo "Application deployed to $ENVIRONMENT and responding on port $DEPLOY_PORT."
                             exit 0
                         fi
